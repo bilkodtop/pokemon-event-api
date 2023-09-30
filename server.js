@@ -83,6 +83,6 @@ app.get("/giris", (req, res) => {
     }
   });
 
-app.listen(port, () => {
+app.listen(process.env.PORT || port, () => {
   console.log(`Sunucu ${port} portunda çalışıyor.`);
 });
