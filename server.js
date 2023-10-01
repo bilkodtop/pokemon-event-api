@@ -72,6 +72,19 @@ app.get("/kaydet", (req, res) => {
     res.json({ message: yeniPokemon + " başarıyla yakalandı." });
 });
 
+app.get("/en-yuksek-yakalama-oranlari", (req, res) => {
+  // Kullanıcıları Pokemon yakalama oranına göre sırala
+  const siraliKullanicilar = veriler.kullanicilar.sort((a, b) => {
+    return b.yakalananPokemonlar.length - a.yakalananPokemonlar.length;
+  });
+
+  // En yüksek 3 yakalama oranına sahip kullanıcıları seç
+  const enYuksekOranlar = siraliKullanicilar.slice(0, 3);
+
+  res.json(enYuksekOranlar);
+});
+
+
 
 app.get("/giris", (req, res) => {
     const ogrenciNo = req.query.ogrenciNo;
