@@ -10,6 +10,8 @@
   "author": "ardaaydinkilinc",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "mongodb": "^6.1.0",
+    "sqlite3": "^5.1.6"
   }
 }
