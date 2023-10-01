@@ -24,33 +24,45 @@ db.serialize(() => {
 
 
 app.get("/kaydet", (req, res) => {
-  try {
+    try {
       const kullaniciAdi = req.query.kullanici_adi;
       const ogrenciNo = req.query.ogrenci_no;
-
+  
       // Kullanıcı adının benzersiz olup olmadığını kontrol et
       db.get('SELECT * FROM kullanicilar WHERE nickname = ?', [kullaniciAdi], (err, row) => {
-          if (err) {
+        if (err) {
+          return res.status(500).json({ message: err.message });
+        }
+  
+        if (row) {
+          // Kullanıcı adı zaten alınmışsa 409 Conflict yanıtını gönder
+          return res.status(400).json({ message: "Bu kullanıcı adı zaten kullanılıyor." });
+        } else {
+          // Öğrenci numarasının başkası tarafından kullanılıp kullanılmadığını kontrol et
+          db.get('SELECT * FROM kullanicilar WHERE ogrenciNo = ?', [ogrenciNo], (err, row) => {
+            if (err) {
               return res.status(500).json({ message: err.message });
-          }
-
-          if (row) {
-              // Kullanıcı adı zaten alınmışsa 409 Conflict yanıtını gönder
-              return res.status(400).json({ message: "Bu kullanıcı adı zaten kullanılıyor." });
-          } else {
+            }
+  
+            if (row) {
+              // Öğrenci numarası zaten alınmışsa 400 Bad Request yanıtını gönder
+              return res.status(400).json({ message: "Bu öğrenci numarası zaten kullanılıyor." });
+            } else {
               // Yeni kullanıcıyı veritabanına ekleyin
               db.run('INSERT INTO kullanicilar (nickname, ogrenciNo, yakalananPokemonlar) VALUES (?, ?, ?)', [kullaniciAdi, ogrenciNo, JSON.stringify([])], (err) => {
-                  if (err) {
-                      return res.status(500).json({ message: err.message });
-                  }
-                  return res.json({ message: "Kaydınız başarıyla tamamlandı!" });
+                if (err) {
+                  return res.status(500).json({ message: err.message });
+                }
+                return res.json({ message: "Kaydınız başarıyla tamamlandı!" });
               });
-          }
+            }
+          });
+        }
       });
-  } catch (error) {
+    } catch (error) {
       res.status(500).json({ message: error.message });
-  }
-});
+    }
+  });
 
  
 app.get('/pokemon-ekle', (req, res) => {
