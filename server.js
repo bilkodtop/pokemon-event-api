@@ -11,90 +11,107 @@ app.use((req, res, next) => {
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept'); // İzin verilen başlık alanları
     next();
   });
+const sqlite3 = require('sqlite3').verbose();
+const db = new sqlite3.Database('database.db');
+
+// Veritabanı tablosunu oluşturun (sadece ilk kez çalıştırılmalıdır)
+db.serialize(() => {
+    db.run('CREATE TABLE IF NOT EXISTS kullanicilar (id INTEGER PRIMARY KEY, nickname TEXT, ogrenciNo TEXT, yakalananPokemonlar TEXT)');
+});
 
 
-let veriler = require("./db.json");
+
 
 
 app.get("/kaydet", (req, res) => {
-    try {
+  try {
       const kullaniciAdi = req.query.kullanici_adi;
       const ogrenciNo = req.query.ogrenci_no;
-  
+
       // Kullanıcı adının benzersiz olup olmadığını kontrol et
-      const kullaniciVarMi = veriler.kullanicilar.some(
-        (kullanici) => kullanici.nickname === kullaniciAdi
-      );
-  
-      if (kullaniciVarMi) {
-        // Kullanıcı adı zaten alınmışsa 409 Conflict yanıtını gönder
-        res.status(400).json({ message: "Bu kullanıcı adı zaten kullanılıyor." });
-      } else {
-        const yeniKullanici = {
-          nickname: kullaniciAdi,
-          ogrenciNo: ogrenciNo,
-          yakalananPokemonlar: [],
-        };
-  
-        veriler.kullanicilar.push(yeniKullanici);
-  
-        fs.writeFileSync("db.json", JSON.stringify(veriler, null, 4));
-  
-        res.json({ message: "Kaydınız başarıyla tamamlandı!" });
-      }
-    } catch (error) {
+      db.get('SELECT * FROM kullanicilar WHERE nickname = ?', [kullaniciAdi], (err, row) => {
+          if (err) {
+              return res.status(500).json({ message: err.message });
+          }
+
+          if (row) {
+              // Kullanıcı adı zaten alınmışsa 409 Conflict yanıtını gönder
+              return res.status(400).json({ message: "Bu kullanıcı adı zaten kullanılıyor." });
+          } else {
+              // Yeni kullanıcıyı veritabanına ekleyin
+              db.run('INSERT INTO kullanicilar (nickname, ogrenciNo, yakalananPokemonlar) VALUES (?, ?, ?)', [kullaniciAdi, ogrenciNo, JSON.stringify([])], (err) => {
+                  if (err) {
+                      return res.status(500).json({ message: err.message });
+                  }
+                  return res.json({ message: "Kaydınız başarıyla tamamlandı!" });
+              });
+          }
+      });
+  } catch (error) {
       res.status(500).json({ message: error.message });
-    }
-  });
+  }
+});
+
  
-  app.get('/pokemon-ekle', (req, res) => {
-    const ogrenciNo = req.query.ogrenciNo;
-    const yeniPokemon = req.query.yeniPokemon;
+app.get('/pokemon-ekle', (req, res) => {
+  const ogrenciNo = req.query.ogrenciNo;
+  const yeniPokemon = req.query.yeniPokemon;
 
-    // Öğrenci numarasına göre kullanıcıyı bul
-    const kullanici = veriler.kullanicilar.find((kullanici) => {
-        return kullanici.ogrenciNo === ogrenciNo;
-    });
+  // Öğrenci numarasına göre kullanıcıyı bul
+  db.get('SELECT * FROM kullanicilar WHERE ogrenciNo = ?', [ogrenciNo], (err, kullanici) => {
+      if (err) {
+          return res.status(500).json({ message: err.message });
+      }
 
-    // Kullanıcı bulunamazsa hata mesajı döndür
-    if (!kullanici) {
-        return res.status(404).json({ error: "Kullanıcı bulunamadı" });
-    }
+      if (!kullanici) {
+          return res.status(404).json({ error: "Kullanıcı bulunamadı" });
+      }
 
-    // Yeni Pokémon'i kullanıcının listesine ekle
-    if (!kullanici.yakalananPokemonlar.includes(yeniPokemon)) {
-        kullanici.yakalananPokemonlar.push(yeniPokemon);}
+      // Kullanıcının yakalananPokemonlar alanını JSON'dan diziye çevirin
+      const yakalananPokemonlar = JSON.parse(kullanici.yakalananPokemonlar);
 
-    // Kullanıcıyı db.json dosyasına kaydet
-    fs.writeFileSync("db.json", JSON.stringify(veriler, null, 4));
+      // Yeni Pokémon'i kullanıcının listesine ekleyin
+      if (!yakalananPokemonlar.includes(yeniPokemon)) {
+          yakalananPokemonlar.push(yeniPokemon);
 
-    // Başarı mesajı döndür
-    res.json({ message: yeniPokemon + " başarıyla yakalandı." });
+          // Kullanıcının yakalananPokemonlar alanını güncelleyin
+          db.run('UPDATE kullanicilar SET yakalananPokemonlar = ? WHERE ogrenciNo = ?', [JSON.stringify(yakalananPokemonlar), ogrenciNo], (err) => {
+              if (err) {
+                  return res.status(500).json({ message: err.message });
+              }
+              return res.json({ message: yeniPokemon + " başarıyla yakalandı." });
+          });
+      } else {
+          return res.status(400).json({ message: "Bu Pokémon zaten yakalandı." });
+      }
+  });
 });
 
 app.get("/en-yuksek-yakalama-oranlari", (req, res) => {
-  // Kullanıcıları Pokemon yakalama oranına göre sırala
-  const siraliKullanicilar = veriler.kullanicilar.sort((a, b) => {
-    return b.yakalananPokemonlar.length - a.yakalananPokemonlar.length;
+  // Kullanıcıları Pokemon yakalama oranına göre sorgulayın
+  db.all('SELECT * FROM kullanicilar ORDER BY length(yakalananPokemonlar) DESC LIMIT 3', [], (err, rows) => {
+      if (err) {
+          return res.status(500).json({ message: err.message });
+      }
+      return res.json(rows);
   });
-
-  // En yüksek 3 yakalama oranına sahip kullanıcıları seç
-  const enYuksekOranlar = siraliKullanicilar.slice(0, 3);
-
-  res.json(enYuksekOranlar);
 });
 
 
 
 app.get("/giris", (req, res) => {
-    const ogrenciNo = req.query.ogrenciNo;
-    const kullanici = veriler.kullanicilar.find((kullanici) => kullanici.ogrenciNo === ogrenciNo);
-    if (kullanici) {
-      res.status(200).json({ message: "Giriş başarılı" });
-    } else {
-      res.status(401).json({ message: "Bu öğrenci numarası kayıtlı değil" });
-    }
+  const ogrenciNo = req.query.ogrenci_no;
+  db.get('SELECT * FROM kullanicilar WHERE ogrenciNo = ?', [ogrenciNo], (err, row) => {
+      if (err) {
+          return res.status(500).json({ message: err.message });
+      }
+      if (row) {
+          res.status(200).json({ message: "Giriş başarılı" });
+      } else {
+          res.status(401).json({ message: "Bu öğrenci numarası kayıtlı değil" });
+      }
   });
+});
 
 app.listen(process.env.PORT || port, () => {
   console.log(`Sunucu ${port} portunda çalışıyor.`);
