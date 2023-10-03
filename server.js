@@ -125,6 +125,27 @@ app.get("/giris", (req, res) => {
   });
 });
 
+app.get("/kullanici-sil", (req, res) => {
+  const ogrenciNo = req.query.ogrenci_no;
+
+  db.get('SELECT * FROM kullanicilar WHERE ogrenciNo = ?', [ogrenciNo], (err, kullanici) => {
+    if (err) {
+      return res.status(500).json({ message: err.message });
+    }
+
+    if (!kullanici) {
+      return res.status(404).json({ error: "Kullanıcı bulunamadı" });
+    }
+    db.run('DELETE FROM kullanicilar WHERE ogrenciNo = ?', [ogrenciNo], (err) => {
+      if (err) {
+        return res.status(500).json({ message: err.message });
+      }
+      return res.json({ message: "Kullanıcı başarıyla silindi." });
+    });
+  });
+});
+
+
 app.listen(process.env.PORT || port, () => {
   console.log(`Sunucu ${port} portunda çalışıyor.`);
 });
